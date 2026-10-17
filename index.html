@@ -3,46 +3,46 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOS 6×3</title>
+<title>✕O✕ 6×3</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
-  :root { --p1:#3b82f6; --p2:#ef4444; --bg:#0f172a; --card:#1e293b; --text:#e2e8f0; --muted:#94a3b8; }
+  :root { color-scheme:dark; --p1:#3b82f6; --p2:#ef4444; --bg:#0a0a0a; --card:#171717; --cell:#262626; --btn:#333333; --text:#e5e5e5; --muted:#a3a3a3; }
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text);
          min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:20px; }
   h1 { margin:8px 0 4px; letter-spacing:4px; }
   .sub { color:var(--muted); margin-bottom:16px; text-align:center; }
   .panel { background:var(--card); border-radius:14px; padding:18px; width:100%; max-width:640px; margin-bottom:14px; }
-  button { font:inherit; border:0; border-radius:10px; padding:10px 16px; cursor:pointer; background:#334155; color:var(--text); }
+  button { font:inherit; border:0; border-radius:10px; padding:10px 16px; cursor:pointer; background:var(--btn); color:var(--text); }
   button:hover { filter:brightness(1.15); }
-  button.primary { background:#22c55e; color:#052e16; font-weight:600; }
+  button.primary { background:#e5e5e5; color:#0a0a0a; font-weight:600; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; }
-  input { font:inherit; padding:10px; border-radius:10px; border:1px solid #475569; background:#0f172a; color:var(--text); flex:1; min-width:0; }
+  input { font:inherit; padding:10px; border-radius:10px; border:1px solid #404040; background:var(--bg); color:var(--text); flex:1; min-width:0; }
   .scores { display:flex; justify-content:space-between; gap:10px; }
-  .score { flex:1; text-align:center; padding:10px; border-radius:10px; border:3px solid transparent; background:#0f172a; }
+  .score { flex:1; text-align:center; padding:10px; border-radius:10px; border:3px solid transparent; background:var(--cell); }
   .score.active { border-color:currentColor; }
   .score .n { font-size:32px; font-weight:700; }
   .p1 { color:var(--p1); } .p2 { color:var(--p2); }
   .status { text-align:center; margin:12px 0; min-height:24px; font-weight:600; }
   .picker { display:flex; justify-content:center; gap:10px; margin-bottom:12px; }
   .picker button { width:64px; font-size:24px; font-weight:700; }
-  .picker button.sel { background:#facc15; color:#1c1917; }
+  .picker button.sel { background:#e5e5e5; color:#0a0a0a; }
   .board-wrap { position:relative; width:100%; aspect-ratio:6/3; }
   .board { position:absolute; inset:0; display:grid; grid-template-columns:repeat(6,1fr); grid-template-rows:repeat(3,1fr); gap:6px; }
-  .cell { background:#0f172a; border-radius:8px; display:flex; align-items:center; justify-content:center;
+  .cell { background:var(--cell); border-radius:8px; display:flex; align-items:center; justify-content:center;
           font-size:clamp(22px,7vw,44px); font-weight:800; cursor:pointer; user-select:none; transition:background .15s; }
-  .cell:hover:not(.filled) { background:#273449; }
+  .cell:hover:not(.filled) { background:#363636; }
   .cell.filled { cursor:default; }
-  .cell.last { outline:2px solid #facc15; }
+  .cell.last { outline:2px solid #a3a3a3; }
   svg.lines { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-  .share { word-break:break-all; background:#0f172a; padding:10px; border-radius:8px; font-family:monospace; font-size:13px; margin:10px 0; }
+  .share { word-break:break-all; background:var(--bg); padding:10px; border-radius:8px; font-family:monospace; font-size:13px; margin:10px 0; }
   .hidden { display:none !important; }
   .rules { color:var(--muted); font-size:14px; line-height:1.5; }
 </style>
 </head>
 <body>
-<h1>SOS</h1>
-<div class="sub">6 × 3 grid · make S‑O‑S lines to score</div>
+<h1>✕ O ✕</h1>
+<div class="sub">6 × 3 grid · make ✕‑O‑✕ lines to score</div>
 
 <div id="menu" class="panel">
   <div class="row" style="margin-bottom:14px">
@@ -53,9 +53,9 @@
     <input id="joinCode" placeholder="…or paste a room code to join">
     <button id="btnJoin">Join</button>
   </div>
-  <p class="rules"><b>Rules:</b> Take turns placing an <b>S</b> or an <b>O</b> in any empty square.
-  If you complete S‑O‑S in a row, column or diagonal, you score a point and <b>go again</b>.
-  When the board is full, the player with the most SOSes wins.</p>
+  <p class="rules"><b>Rules:</b> Take turns placing a <b>✕</b> or an <b>O</b> in any empty square.
+  If you complete ✕‑O‑✕ in a row, column or diagonal, you score a point and <b>go again</b>.
+  When the board is full, the player with the most lines wins.</p>
 </div>
 
 <div id="lobby" class="panel hidden" style="text-align:center">
@@ -76,7 +76,7 @@
   </div>
   <div class="status" id="status"></div>
   <div class="picker">
-    <button id="pickS" class="sel">S</button>
+    <button id="pickS" class="sel">✕</button>
     <button id="pickO">O</button>
   </div>
   <div class="board-wrap">
@@ -96,7 +96,7 @@ const $ = id => document.getElementById(id);
 let mode = null;          // 'local' | 'online'
 let me = 0;               // online: 1 = host, 2 = guest
 let conn = null, peer = null;
-let letter = 'S';
+let letter = 'X';
 let starter = 1;
 let state;
 
@@ -113,11 +113,11 @@ function findSOS(r, c) {
   const dirs = [[0,1],[1,0],[1,1],[1,-1]];
   if (at(r, c) === 'O') {
     for (const [dr, dc] of dirs)
-      if (at(r-dr, c-dc) === 'S' && at(r+dr, c+dc) === 'S') found.push([r-dr, c-dc, r+dr, c+dc]);
+      if (at(r-dr, c-dc) === 'X' && at(r+dr, c+dc) === 'X') found.push([r-dr, c-dc, r+dr, c+dc]);
   } else {
     for (const [dr, dc] of dirs) for (const s of [1, -1]) {
       const a = dr * s, b = dc * s;
-      if (at(r+a, c+b) === 'O' && at(r+2*a, c+2*b) === 'S') found.push([r, c, r+2*a, c+2*b]);
+      if (at(r+a, c+b) === 'O' && at(r+2*a, c+2*b) === 'X') found.push([r, c, r+2*a, c+2*b]);
     }
   }
   return found;
@@ -142,7 +142,7 @@ function render() {
   state.grid.forEach((v, i) => {
     const d = document.createElement('div');
     d.className = 'cell' + (v ? ' filled p' + state.owner[i] : '') + (i === state.last ? ' last' : '');
-    d.textContent = v || '';
+    d.textContent = v === 'X' ? '✕' : (v || '');
     d.onclick = () => onCell(i);
     board.appendChild(d);
   });
@@ -173,12 +173,12 @@ function onCell(i) {
   render();
 }
 
-function setLetter(L) { letter = L; $('pickS').classList.toggle('sel', L === 'S'); $('pickO').classList.toggle('sel', L === 'O'); }
-$('pickS').onclick = () => setLetter('S');
+function setLetter(L) { letter = L; $('pickS').classList.toggle('sel', L === 'X'); $('pickO').classList.toggle('sel', L === 'O'); }
+$('pickS').onclick = () => setLetter('X');
 $('pickO').onclick = () => setLetter('O');
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
-  if (e.key.toLowerCase() === 's') setLetter('S');
+  if (e.key.toLowerCase() === 'x') setLetter('X');
   if (e.key.toLowerCase() === 'o') setLetter('O');
 });
 
