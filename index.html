@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>✕O✕ 6×3</title>
+<title>O vs ✕ · 6×3</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
   :root { color-scheme:dark; --p1:#3b82f6; --p2:#ef4444; --bg:#0a0a0a; --card:#171717; --cell:#262626; --btn:#333333; --text:#e5e5e5; --muted:#a3a3a3; }
@@ -24,9 +24,6 @@
   .score .n { font-size:32px; font-weight:700; }
   .p1 { color:var(--p1); } .p2 { color:var(--p2); }
   .status { text-align:center; margin:12px 0; min-height:24px; font-weight:600; }
-  .picker { display:flex; justify-content:center; gap:10px; margin-bottom:12px; }
-  .picker button { width:64px; font-size:24px; font-weight:700; }
-  .picker button.sel { background:#e5e5e5; color:#0a0a0a; }
   .board-wrap { position:relative; width:100%; aspect-ratio:6/3; }
   .board { position:absolute; inset:0; display:grid; grid-template-columns:repeat(6,1fr); grid-template-rows:repeat(3,1fr); gap:6px; }
   .cell { background:var(--cell); border-radius:8px; display:flex; align-items:center; justify-content:center;
@@ -41,8 +38,8 @@
 </style>
 </head>
 <body>
-<h1>✕ O ✕</h1>
-<div class="sub">6 × 3 grid · make ✕‑O‑✕ lines to score</div>
+<h1><span class="p1">O</span> vs <span class="p2">✕</span></h1>
+<div class="sub">6 × 3 grid · get 3 in a row to score</div>
 
 <div id="menu" class="panel">
   <div class="row" style="margin-bottom:14px">
@@ -53,9 +50,7 @@
     <input id="joinCode" placeholder="…or paste a room code to join">
     <button id="btnJoin">Join</button>
   </div>
-  <p class="rules"><b>Rules:</b> Take turns placing a <b>✕</b> or an <b>O</b> in any empty square.
-  If you complete ✕‑O‑✕ in a row, column or diagonal, you score a point and <b>go again</b>.
-  When the board is full, the player with the most lines wins.</p>
+  <p class="rules"><b>Rules:</b> Player 1 is always <b class="p1">blue O</b>, Player 2 is always <b class="p2">red ✕</b>. Take turns placing your mark in any empty square. Every 3 of your marks in a row, column or diagonal scores 1 point (4 in a row = 2 points). When the board is full, the player with the most points wins.</p>
 </div>
 
 <div id="lobby" class="panel hidden" style="text-align:center">
@@ -75,10 +70,6 @@
     <div class="score p2" id="s2"><div id="n2">Player 2</div><div class="n" id="c2">0</div></div>
   </div>
   <div class="status" id="status"></div>
-  <div class="picker">
-    <button id="pickS" class="sel">✕</button>
-    <button id="pickO">O</button>
-  </div>
   <div class="board-wrap">
     <div class="board" id="board"></div>
     <svg class="lines" id="lines" viewBox="0 0 6 3" preserveAspectRatio="none"></svg>
@@ -96,7 +87,7 @@ const $ = id => document.getElementById(id);
 let mode = null;          // 'local' | 'online'
 let me = 0;               // online: 1 = host, 2 = guest
 let conn = null, peer = null;
-let letter = 'X';
+const MARK = { 1: 'O', 2: 'X' };   // Player 1 = blue O, Player 2 = red X
 let starter = 1;
 let state;
 
@@ -108,28 +99,23 @@ function newState(first) {
 // ---------- Game logic ----------
 const at = (r, c) => (r < 0 || r >= ROWS || c < 0 || c >= COLS) ? null : state.grid[r * COLS + c];
 
-function findSOS(r, c) {
-  const found = [];
-  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
-  if (at(r, c) === 'O') {
-    for (const [dr, dc] of dirs)
-      if (at(r-dr, c-dc) === 'X' && at(r+dr, c+dc) === 'X') found.push([r-dr, c-dc, r+dr, c+dc]);
-  } else {
-    for (const [dr, dc] of dirs) for (const s of [1, -1]) {
-      const a = dr * s, b = dc * s;
-      if (at(r+a, c+b) === 'O' && at(r+2*a, c+2*b) === 'X') found.push([r, c, r+2*a, c+2*b]);
+function findLines(r, c) {
+  const L = at(r, c), found = [];
+  for (const [dr, dc] of [[0,1],[1,0],[1,1],[1,-1]])
+    for (let k = -2; k <= 0; k++) {          // every 3-in-a-row window that contains (r, c)
+      const r0 = r + k*dr, c0 = c + k*dc;
+      if ([0,1,2].every(j => at(r0 + j*dr, c0 + j*dc) === L)) found.push([r0, c0, r0 + 2*dr, c0 + 2*dc]);
     }
-  }
   return found;
 }
 
-function applyMove(idx, L, player) {
+function applyMove(idx, player) {
   if (state.over || state.grid[idx] || player !== state.turn) return false;
-  state.grid[idx] = L; state.owner[idx] = player; state.last = idx;
-  const found = findSOS(Math.floor(idx / COLS), idx % COLS);
+  state.grid[idx] = MARK[player]; state.owner[idx] = player; state.last = idx;
+  const found = findLines(Math.floor(idx / COLS), idx % COLS);
   found.forEach(l => state.lines.push({ l, p: player }));
   state.scores[player] += found.length;
-  if (!found.length) state.turn = player === 1 ? 2 : 1;
+  state.turn = player === 1 ? 2 : 1;
   if (state.grid.every(x => x)) state.over = true;
   return true;
 }
@@ -149,7 +135,7 @@ function render() {
   $('lines').innerHTML = state.lines.map(({ l: [r1,c1,r2,c2], p }) =>
     `<line x1="${c1+.5}" y1="${r1+.5}" x2="${c2+.5}" y2="${r2+.5}" stroke="var(--p${p})"
       stroke-width="0.07" stroke-linecap="round" opacity="0.7"/>`).join('');
-  $('n1').textContent = name(1); $('n2').textContent = name(2);
+  $('n1').textContent = 'O · ' + name(1); $('n2').textContent = '✕ · ' + name(2);
   $('c1').textContent = state.scores[1]; $('c2').textContent = state.scores[2];
   $('s1').classList.toggle('active', !state.over && state.turn === 1);
   $('s2').classList.toggle('active', !state.over && state.turn === 2);
@@ -168,19 +154,10 @@ function render() {
 function onCell(i) {
   const player = mode === 'online' ? me : state.turn;
   if (mode === 'online' && (!conn || !conn.open)) return;
-  if (!applyMove(i, letter, player)) return;
-  if (mode === 'online') conn.send({ t: 'move', i, L: letter });
+  if (!applyMove(i, player)) return;
+  if (mode === 'online') conn.send({ t: 'move', i });
   render();
 }
-
-function setLetter(L) { letter = L; $('pickS').classList.toggle('sel', L === 'X'); $('pickO').classList.toggle('sel', L === 'O'); }
-$('pickS').onclick = () => setLetter('X');
-$('pickO').onclick = () => setLetter('O');
-document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return;
-  if (e.key.toLowerCase() === 'x') setLetter('X');
-  if (e.key.toLowerCase() === 'o') setLetter('O');
-});
 
 function show(id) { ['menu','lobby','game'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
 function startGame() { state = newState(starter); show('game'); render(); }
@@ -209,7 +186,7 @@ const PREFIX = 'sos6x3-game-';
 function wire(c) {
   conn = c;
   c.on('data', msg => {
-    if (msg.t === 'move') { applyMove(msg.i, msg.L, me === 1 ? 2 : 1); render(); }
+    if (msg.t === 'move') { applyMove(msg.i, me === 1 ? 2 : 1); render(); }
     else if (msg.t === 'restart') { starter = msg.starter; startGame(); }
   });
   c.on('close', () => { if (mode === 'online') $('status').textContent = '⚠️ Your friend disconnected.'; });
