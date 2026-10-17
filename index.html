@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOS 6×3</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root { --p1:#3b82f6; --p2:#ef4444; --bg:#0f172a; --card:#1e293b; --text:#e2e8f0; --muted:#94a3b8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text);
+         min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:20px; }
+  h1 { margin:8px 0 4px; letter-spacing:4px; }
+  .sub { color:var(--muted); margin-bottom:16px; text-align:center; }
+  .panel { background:var(--card); border-radius:14px; padding:18px; width:100%; max-width:640px; margin-bottom:14px; }
+  button { font:inherit; border:0; border-radius:10px; padding:10px 16px; cursor:pointer; background:#334155; color:var(--text); }
+  button:hover { filter:brightness(1.15); }
+  button.primary { background:#22c55e; color:#052e16; font-weight:600; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; }
+  input { font:inherit; padding:10px; border-radius:10px; border:1px solid #475569; background:#0f172a; color:var(--text); flex:1; min-width:0; }
+  .scores { display:flex; justify-content:space-between; gap:10px; }
+  .score { flex:1; text-align:center; padding:10px; border-radius:10px; border:3px solid transparent; background:#0f172a; }
+  .score.active { border-color:currentColor; }
+  .score .n { font-size:32px; font-weight:700; }
+  .p1 { color:var(--p1); } .p2 { color:var(--p2); }
+  .status { text-align:center; margin:12px 0; min-height:24px; font-weight:600; }
+  .picker { display:flex; justify-content:center; gap:10px; margin-bottom:12px; }
+  .picker button { width:64px; font-size:24px; font-weight:700; }
+  .picker button.sel { background:#facc15; color:#1c1917; }
+  .board-wrap { position:relative; width:100%; aspect-ratio:6/3; }
+  .board { position:absolute; inset:0; display:grid; grid-template-columns:repeat(6,1fr); grid-template-rows:repeat(3,1fr); gap:6px; }
+  .cell { background:#0f172a; border-radius:8px; display:flex; align-items:center; justify-content:center;
+          font-size:clamp(22px,7vw,44px); font-weight:800; cursor:pointer; user-select:none; transition:background .15s; }
+  .cell:hover:not(.filled) { background:#273449; }
+  .cell.filled { cursor:default; }
+  .cell.last { outline:2px solid #facc15; }
+  svg.lines { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .share { word-break:break-all; background:#0f172a; padding:10px; border-radius:8px; font-family:monospace; font-size:13px; margin:10px 0; }
+  .hidden { display:none !important; }
+  .rules { color:var(--muted); font-size:14px; line-height:1.5; }
+</style>
+</head>
+<body>
+<h1>SOS</h1>
+<div class="sub">6 × 3 grid · make S‑O‑S lines to score</div>
+
+<div id="menu" class="panel">
+  <div class="row" style="margin-bottom:14px">
+    <button class="primary" id="btnHost">🌐 Play online with a friend</button>
+    <button id="btnLocal">👥 Play on this device</button>
+  </div>
+  <div class="row">
+    <input id="joinCode" placeholder="…or paste a room code to join">
+    <button id="btnJoin">Join</button>
+  </div>
+  <p class="rules"><b>Rules:</b> Take turns placing an <b>S</b> or an <b>O</b> in any empty square.
+  If you complete S‑O‑S in a row, column or diagonal, you score a point and <b>go again</b>.
+  When the board is full, the player with the most SOSes wins.</p>
+</div>
+
+<div id="lobby" class="panel hidden" style="text-align:center">
+  <div id="lobbyMsg">Creating room…</div>
+  <div id="shareBox" class="hidden">
+    Send this link to your friend:
+    <div class="share" id="shareLink"></div>
+    <div class="row"><button id="btnCopy">Copy link</button></div>
+    <p class="rules">Room code: <b id="roomCode"></b> · Waiting for your friend to join…</p>
+  </div>
+  <div class="row" style="margin-top:10px"><button id="btnCancel">Back</button></div>
+</div>
+
+<div id="game" class="panel hidden">
+  <div class="scores">
+    <div class="score p1" id="s1"><div id="n1">Player 1</div><div class="n" id="c1">0</div></div>
+    <div class="score p2" id="s2"><div id="n2">Player 2</div><div class="n" id="c2">0</div></div>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="picker">
+    <button id="pickS" class="sel">S</button>
+    <button id="pickO">O</button>
+  </div>
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+    <svg class="lines" id="lines" viewBox="0 0 6 3" preserveAspectRatio="none"></svg>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <button id="btnRestart">New game</button>
+    <button id="btnMenu">Menu</button>
+  </div>
+</div>
+
+<script>
+const COLS = 6, ROWS = 3;
+const $ = id => document.getElementById(id);
+
+let mode = null;          // 'local' | 'online'
+let me = 0;               // online: 1 = host, 2 = guest
+let conn = null, peer = null;
+let letter = 'S';
+let starter = 1;
+let state;
+
+function newState(first) {
+  return { grid: Array(ROWS * COLS).fill(null), owner: Array(ROWS * COLS).fill(0),
+           turn: first, scores: { 1: 0, 2: 0 }, lines: [], last: -1, over: false };
+}
+
+// ---------- Game logic ----------
+const at = (r, c) => (r < 0 || r >= ROWS || c < 0 || c >= COLS) ? null : state.grid[r * COLS + c];
+
+function findSOS(r, c) {
+  const found = [];
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  if (at(r, c) === 'O') {
+    for (const [dr, dc] of dirs)
+      if (at(r-dr, c-dc) === 'S' && at(r+dr, c+dc) === 'S') found.push([r-dr, c-dc, r+dr, c+dc]);
+  } else {
+    for (const [dr, dc] of dirs) for (const s of [1, -1]) {
+      const a = dr * s, b = dc * s;
+      if (at(r+a, c+b) === 'O' && at(r+2*a, c+2*b) === 'S') found.push([r, c, r+2*a, c+2*b]);
+    }
+  }
+  return found;
+}
+
+function applyMove(idx, L, player) {
+  if (state.over || state.grid[idx] || player !== state.turn) return false;
+  state.grid[idx] = L; state.owner[idx] = player; state.last = idx;
+  const found = findSOS(Math.floor(idx / COLS), idx % COLS);
+  found.forEach(l => state.lines.push({ l, p: player }));
+  state.scores[player] += found.length;
+  if (!found.length) state.turn = player === 1 ? 2 : 1;
+  if (state.grid.every(x => x)) state.over = true;
+  return true;
+}
+
+// ---------- Rendering ----------
+const name = p => mode === 'online' ? (p === me ? 'You' : 'Friend') : 'Player ' + p;
+
+function render() {
+  const board = $('board'); board.innerHTML = '';
+  state.grid.forEach((v, i) => {
+    const d = document.createElement('div');
+    d.className = 'cell' + (v ? ' filled p' + state.owner[i] : '') + (i === state.last ? ' last' : '');
+    d.textContent = v || '';
+    d.onclick = () => onCell(i);
+    board.appendChild(d);
+  });
+  $('lines').innerHTML = state.lines.map(({ l: [r1,c1,r2,c2], p }) =>
+    `<line x1="${c1+.5}" y1="${r1+.5}" x2="${c2+.5}" y2="${r2+.5}" stroke="var(--p${p})"
+      stroke-width="0.07" stroke-linecap="round" opacity="0.7"/>`).join('');
+  $('n1').textContent = name(1); $('n2').textContent = name(2);
+  $('c1').textContent = state.scores[1]; $('c2').textContent = state.scores[2];
+  $('s1').classList.toggle('active', !state.over && state.turn === 1);
+  $('s2').classList.toggle('active', !state.over && state.turn === 2);
+
+  let msg;
+  if (state.over) {
+    const a = state.scores[1], b = state.scores[2], w = a > b ? 1 : 2;
+    msg = a === b ? "🤝 It's a draw!" : (name(w) === 'You' ? '🏆 You win!' : `🏆 ${name(w)} wins!`);
+  } else if (mode === 'online') {
+    msg = state.turn === me ? 'Your turn' : "Friend's turn…";
+  } else msg = `${name(state.turn)}'s turn`;
+  $('status').textContent = msg;
+  $('status').className = 'status' + (state.over ? '' : ' p' + state.turn);
+}
+
+function onCell(i) {
+  const player = mode === 'online' ? me : state.turn;
+  if (mode === 'online' && (!conn || !conn.open)) return;
+  if (!applyMove(i, letter, player)) return;
+  if (mode === 'online') conn.send({ t: 'move', i, L: letter });
+  render();
+}
+
+function setLetter(L) { letter = L; $('pickS').classList.toggle('sel', L === 'S'); $('pickO').classList.toggle('sel', L === 'O'); }
+$('pickS').onclick = () => setLetter('S');
+$('pickO').onclick = () => setLetter('O');
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key.toLowerCase() === 's') setLetter('S');
+  if (e.key.toLowerCase() === 'o') setLetter('O');
+});
+
+function show(id) { ['menu','lobby','game'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+function startGame() { state = newState(starter); show('game'); render(); }
+
+$('btnRestart').onclick = () => {
+  if (mode === 'online' && (!conn || !conn.open)) return;
+  starter = starter === 1 ? 2 : 1;            // alternate who goes first
+  if (mode === 'online') conn.send({ t: 'restart', starter });
+  startGame();
+};
+function toMenu() {
+  if (peer) peer.destroy();
+  peer = conn = null; mode = null;
+  history.replaceState(null, '', location.pathname);
+  show('menu');
+}
+$('btnMenu').onclick = toMenu;
+$('btnCancel').onclick = toMenu;
+
+// ---------- Local ----------
+$('btnLocal').onclick = () => { mode = 'local'; starter = 1; startGame(); };
+
+// ---------- Online (PeerJS / WebRTC, peer-to-peer) ----------
+const PREFIX = 'sos6x3-game-';
+
+function wire(c) {
+  conn = c;
+  c.on('data', msg => {
+    if (msg.t === 'move') { applyMove(msg.i, msg.L, me === 1 ? 2 : 1); render(); }
+    else if (msg.t === 'restart') { starter = msg.starter; startGame(); }
+  });
+  c.on('close', () => { if (mode === 'online') $('status').textContent = '⚠️ Your friend disconnected.'; });
+}
+
+$('btnHost').onclick = () => {
+  mode = 'online'; me = 1; starter = 1; show('lobby');
+  $('lobbyMsg').textContent = 'Creating room…'; $('shareBox').classList.add('hidden');
+  const room = Math.random().toString(36).slice(2, 8);
+  peer = new Peer(PREFIX + room);
+  peer.on('open', () => {
+    const link = location.origin + location.pathname + '?room=' + room;
+    $('lobbyMsg').textContent = 'Room ready!';
+    $('shareLink').textContent = link; $('roomCode').textContent = room;
+    $('shareBox').classList.remove('hidden');
+    $('btnCopy').onclick = () => navigator.clipboard.writeText(link).then(() => $('btnCopy').textContent = 'Copied!');
+  });
+  peer.on('connection', c => {
+    if (conn && conn.open) { c.close(); return; }
+    c.on('open', () => { wire(c); startGame(); c.send({ t: 'restart', starter }); });
+  });
+  peer.on('error', e => { $('lobbyMsg').textContent = 'Connection error (' + e.type + '). Go back and try again.'; });
+};
+
+function join(room) {
+  room = room.trim().toLowerCase().replace(/.*room=/, '');
+  if (!room) return;
+  mode = 'online'; me = 2; show('lobby');
+  $('shareBox').classList.add('hidden');
+  $('lobbyMsg').textContent = 'Joining room ' + room + '…';
+  peer = new Peer();
+  peer.on('open', () => {
+    const c = peer.connect(PREFIX + room, { reliable: true });
+    c.on('open', () => wire(c));
+  });
+  peer.on('error', e => {
+    $('lobbyMsg').textContent = e.type === 'peer-unavailable'
+      ? 'Room not found. Ask your friend to send a fresh link.' : 'Connection error (' + e.type + ').';
+  });
+}
+$('btnJoin').onclick = () => join($('joinCode').value);
+
+const qRoom = new URLSearchParams(location.search).get('room');
+if (qRoom) join(qRoom);
+</script>
+</body>
+</html>
